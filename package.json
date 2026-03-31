@@ -10,7 +10,7 @@
     "mongodb": "^6.3.0"
   },
   "devDependencies": {
-    "vercel": "^33.0.0"
+    "vercel": "^33.7.1"
   },
   "engines": {
     "node": ">=18"
