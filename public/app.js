@@ -10,7 +10,7 @@ const CACHE_KEY = 'urbex_locations_cache';
 const CACHE_TTL = 5 * 60 * 1000; // 5 min
 
 // ─── STATE ────────────────────────────────────
-let map, clusterGroup;
+let map;
 let locations = [];         // master array
 let markerMap = {};         // id → leaflet marker
 let currentLocationId = null;
@@ -118,20 +118,26 @@ function closeModal(id) {
   document.getElementById(id).classList.add('hidden');
 }
 
-// ─── MARKER ICONS ─────────────────────────────
+// ─── MARKER ICONS (BETTER STYLING) ─────────────────────────────
 function createIcon(visited) {
   return L.divIcon({
-    html: `<div class="urbex-marker ${visited ? 'visited' : 'unvisited'}"></div>`,
-    iconSize: [28, 28],
-    iconAnchor: [8, 28],
-    popupAnchor: [6, -28],
-    className: ''
+    html: `
+      <div class="urbex-marker ${visited ? 'visited' : 'unvisited'}">
+        <div class="marker-pulse"></div>
+        <div class="marker-core"></div>
+        <div class="marker-shadow"></div>
+      </div>
+    `,
+    iconSize: [32, 42],
+    iconAnchor: [16, 42],
+    popupAnchor: [0, -38],
+    className: 'custom-marker'
   });
 }
 
 // ─── MAP INIT ─────────────────────────────────
 function initMap() {
-  map = L.map('map', { zoomControl: false }).setView([51.505, -0.09], 5);
+  map = L.map('map', { zoomControl: false }).setView([45.0, -93.0], 8);
 
   const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors',
@@ -152,9 +158,7 @@ function initMap() {
 
   L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
-  clusterGroup = L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 50 });
-  map.addLayer(clusterGroup);
-
+  // NO CLUSTERING - markers added directly to map
   // Add mode click
   map.on('click', e => {
     if (!isAddMode) return;
@@ -163,16 +167,27 @@ function initMap() {
   });
 }
 
-// ─── RENDER MARKERS ───────────────────────────
+// ─── RENDER MARKERS (NO CLUSTERING) ───────────────────────────
 function renderMarkers() {
-  clusterGroup.clearLayers();
+  // Clear existing markers from map
+  Object.values(markerMap).forEach(marker => {
+    map.removeLayer(marker);
+  });
   markerMap = {};
 
   locations.forEach(loc => {
     const marker = L.marker([loc.latitude, loc.longitude], { icon: createIcon(loc.visited) });
     marker.on('click', () => openDetailModal(loc._id));
+    marker.on('mouseover', () => {
+      marker.bindTooltip(loc.title, { 
+        permanent: false, 
+        direction: 'top',
+        offset: [0, -20],
+        className: 'marker-tooltip'
+      }).openTooltip();
+    });
     markerMap[loc._id] = marker;
-    clusterGroup.addLayer(marker);
+    marker.addTo(map);
   });
   updateCount();
 }
@@ -301,8 +316,16 @@ async function handleFormSubmit() {
       Cache.add(created);
       const marker = L.marker([created.latitude, created.longitude], { icon: createIcon(created.visited) });
       marker.on('click', () => openDetailModal(created._id));
+      marker.on('mouseover', () => {
+        marker.bindTooltip(created.title, { 
+          permanent: false, 
+          direction: 'top',
+          offset: [0, -20],
+          className: 'marker-tooltip'
+        }).openTooltip();
+      });
       markerMap[created._id] = marker;
-      clusterGroup.addLayer(marker);
+      marker.addTo(map);
       updateCount();
       toast('Location saved', 'success');
       map.flyTo([created.latitude, created.longitude], 14, { duration: 0.8 });
@@ -394,7 +417,7 @@ async function confirmDelete() {
     locations = locations.filter(l => l._id !== id);
     Cache.remove(id);
     if (markerMap[id]) {
-      clusterGroup.removeLayer(markerMap[id]);
+      map.removeLayer(markerMap[id]);
       delete markerMap[id];
     }
     updateCount();
@@ -418,10 +441,12 @@ function applySearch(query) {
   clearBtn.style.display = searchQuery ? '' : 'none';
 
   if (!searchQuery) {
-    // Show all
+    // Show all markers normally
     Object.values(markerMap).forEach(m => {
-      const el = m.getElement();
-      if (el) el.classList.remove('dimmed');
+      if (m.getElement()) {
+        m.getElement().style.opacity = '1';
+        m.getElement().style.filter = 'none';
+      }
     });
     return;
   }
@@ -433,9 +458,11 @@ function applySearch(query) {
     const el = marker.getElement();
     if (!el) return;
     if (matchedIds.has(id)) {
-      el.classList.remove('dimmed');
+      el.style.opacity = '1';
+      el.style.filter = 'none';
     } else {
-      el.classList.add('dimmed');
+      el.style.opacity = '0.4';
+      el.style.filter = 'grayscale(0.5)';
     }
   });
 

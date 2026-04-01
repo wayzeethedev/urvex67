@@ -1,18 +1,12 @@
 {
-  "name": "urbex-map",
+  "name": "urbex",
   "version": "1.0.0",
-  "description": "Single-user urbex location map with Leaflet + MongoDB",
   "private": true,
   "scripts": {
     "dev": "vercel dev"
   },
   "dependencies": {
-    "mongodb": "^6.3.0"
-  },
-  "devDependencies": {
-    "vercel": "^33.7.1"
-  },
-  "engines": {
-    "node": ">=18"
+    "mongo": "^0.1.0",
+    "mongodb": "^6.5.0"
   }
 }

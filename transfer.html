@@ -1,0 +1,266 @@
+// Complete HTML/JS solution to parse KML and generate MongoDB documents
+// Save this as an HTML file and open in browser, or run in Node.js
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>KML to MongoDB Converter</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }
+        textarea { width: 100%; height: 400px; font-family: monospace; font-size: 12px; margin: 10px 0; }
+        button { padding: 10px 20px; background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 10px 5px; }
+        button:hover { background: #0052a3; }
+        pre { background: #f0f0f0; padding: 15px; overflow-x: auto; border-radius: 4px; max-height: 500px; overflow-y: auto; }
+        .tab { margin-left: 20px; }
+        h3 { color: #333; margin-top: 20px; }
+        .stats { background: #e3f2fd; padding: 10px; border-radius: 4px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>KML to MongoDB Document Converter</h1>
+    <p>Convert your KML file to MongoDB documents matching your example format</p>
+    
+    <div class="stats" id="stats"></div>
+    
+    <button onclick="parseKML()">Parse KML and Generate MongoDB Documents</button>
+    <button onclick="copyToClipboard()">Copy to Clipboard</button>
+    <button onclick="downloadJSON()">Download as JSON</button>
+    
+    <h3>Generated MongoDB Documents (JSON format):</h3>
+    <pre id="output"></pre>
+</div>
+
+<script>
+// Your KML data (paste the full KML content here or load from file)
+const kmlData = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document id="1_esubkYWTJiiVcRwbTeeq_3Rqgxwhfoa">
+	<name>Urbex</name>
+	<!-- ... rest of your KML content ... -->
+</Document>
+</kml>`;
+
+// Function to parse KML and extract all Placemark locations
+function parseKML() {
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(kmlData, "text/xml");
+    
+    // Get all Placemark elements
+    const placemarks = xmlDoc.getElementsByTagName("Placemark");
+    const locations = [];
+    
+    for (let i = 0; i < placemarks.length; i++) {
+        const placemark = placemarks[i];
+        
+        // Extract name
+        const nameElement = placemark.getElementsByTagName("name")[0];
+        const name = nameElement ? nameElement.textContent : "Unknown";
+        
+        // Extract description (if exists)
+        const descElement = placemark.getElementsByTagName("description")[0];
+        let description = "";
+        if (descElement) {
+            // Clean up CDATA and HTML
+            let descText = descElement.textContent;
+            descText = descText.replace(/<!\[CDATA\[|\]\]>/g, '');
+            // Remove HTML tags
+            descText = descText.replace(/<[^>]*>/g, '');
+            description = descText.trim();
+        }
+        
+        // Extract coordinates
+        const pointElement = placemark.getElementsByTagName("Point")[0];
+        if (!pointElement) continue;
+        
+        const coordsElement = pointElement.getElementsByTagName("coordinates")[0];
+        if (!coordsElement) continue;
+        
+        let coords = coordsElement.textContent.trim();
+        // Remove altitude if present
+        const coordParts = coords.split(',');
+        let longitude = parseFloat(coordParts[0]);
+        let latitude = parseFloat(coordParts[1]);
+        
+        // Skip if coordinates are invalid
+        if (isNaN(longitude) || isNaN(latitude)) continue;
+        
+        // Look for imageUrl in gx:Carousel if exists
+        let imageUrl = "";
+        const carouselElement = placemark.getElementsByTagName("gx:Carousel")[0];
+        if (carouselElement) {
+            const imageElement = carouselElement.getElementsByTagName("gx:Image")[0];
+            if (imageElement) {
+                const imgUrlElement = imageElement.getElementsByTagName("gx:imageUrl")[0];
+                if (imgUrlElement) {
+                    imageUrl = imgUrlElement.textContent;
+                    // Clean up the URL
+                    imageUrl = imageUrl.split('?')[0];
+                }
+            }
+        }
+        
+        // If no image found, try to use a default or leave empty
+        if (!imageUrl) {
+            imageUrl = "";
+        }
+        
+        // Create MongoDB document
+        const location = {
+            _id: generateObjectId(),
+            title: name,
+            description: description || "No description",
+            imageUrl: imageUrl,
+            latitude: latitude,
+            longitude: longitude,
+            visited: false, // Default to false
+            createdAt: new Date().toISOString()
+        };
+        
+        locations.push(location);
+    }
+    
+    // Display stats
+    const statsDiv = document.getElementById('stats');
+    statsDiv.innerHTML = `<strong>✅ Found ${locations.length} locations</strong><br>
+                          <span class="tab">• Locations with names: ${locations.filter(l => l.title !== "Unknown").length}</span><br>
+                          <span class="tab">• Locations with descriptions: ${locations.filter(l => l.description && l.description !== "No description").length}</span><br>
+                          <span class="tab">• Locations with images: ${locations.filter(l => l.imageUrl).length}</span>`;
+    
+    // Display the MongoDB documents
+    displayMongoDocuments(locations);
+    
+    // Store for download
+    window.currentLocations = locations;
+    
+    return locations;
+}
+
+// Generate a MongoDB-like ObjectId (simplified)
+function generateObjectId() {
+    const timestamp = Math.floor(Date.now() / 1000).toString(16);
+    const random = Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
+    const counter = Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
+    return timestamp + random + counter;
+}
+
+// Display MongoDB documents in various formats
+function displayMongoDocuments(locations) {
+    const outputDiv = document.getElementById('output');
+    
+    // Format as MongoDB insertMany statement
+    let mongoOutput = "// MongoDB Insert Statements\n\n";
+    mongoOutput += "// Method 1: Insert one by one\n";
+    mongoOutput += "// Use in MongoDB shell or MongoDB Compass\n\n";
+    
+    // Individual insert statements
+    for (let i = 0; i < Math.min(locations.length, 50); i++) {
+        const loc = locations[i];
+        mongoOutput += `db.locations.insertOne(${JSON.stringify(loc, null, 2)});\n\n`;
+    }
+    
+    if (locations.length > 50) {
+        mongoOutput += `// ... and ${locations.length - 50} more locations\n\n`;
+    }
+    
+    // Insert many statement
+    mongoOutput += "// Method 2: Insert all at once (recommended)\n";
+    mongoOutput += `db.locations.insertMany(${JSON.stringify(locations, null, 2)});\n`;
+    
+    outputDiv.textContent = mongoOutput;
+}
+
+// Copy to clipboard function
+function copyToClipboard() {
+    const output = document.getElementById('output').textContent;
+    navigator.clipboard.writeText(output).then(() => {
+        alert('Copied to clipboard!');
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+        alert('Failed to copy to clipboard');
+    });
+}
+
+// Download as JSON file
+function downloadJSON() {
+    if (!window.currentLocations) {
+        alert('Please parse the KML first!');
+        return;
+    }
+    
+    const dataStr = JSON.stringify(window.currentLocations, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    
+    const exportFileDefaultName = `locations_${new Date().toISOString().slice(0,19)}.json`;
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+}
+
+// For Node.js usage (if you want to run server-side)
+if (typeof module !== 'undefined' && module.exports) {
+    // Node.js version
+    const fs = require('fs');
+    const { DOMParser } = require('xmldom');
+    
+    function parseKMLNode(filePath) {
+        const kmlString = fs.readFileSync(filePath, 'utf8');
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(kmlString, "text/xml");
+        
+        const placemarks = xmlDoc.getElementsByTagName("Placemark");
+        const locations = [];
+        
+        for (let i = 0; i < placemarks.length; i++) {
+            const placemark = placemarks[i];
+            
+            const nameElement = placemark.getElementsByTagName("name")[0];
+            const name = nameElement ? nameElement.textContent : "Unknown";
+            
+            const descElement = placemark.getElementsByTagName("description")[0];
+            let description = "";
+            if (descElement) {
+                description = descElement.textContent.replace(/<!\[CDATA\[|\]\]>/g, '').replace(/<[^>]*>/g, '').trim();
+            }
+            
+            const pointElement = placemark.getElementsByTagName("Point")[0];
+            if (!pointElement) continue;
+            
+            const coordsElement = pointElement.getElementsByTagName("coordinates")[0];
+            if (!coordsElement) continue;
+            
+            const coordParts = coordsElement.textContent.trim().split(',');
+            const longitude = parseFloat(coordParts[0]);
+            const latitude = parseFloat(coordParts[1]);
+            
+            if (isNaN(longitude) || isNaN(latitude)) continue;
+            
+            locations.push({
+                _id: generateObjectId(),
+                title: name,
+                description: description || "No description",
+                imageUrl: "",
+                latitude: latitude,
+                longitude: longitude,
+                visited: false,
+                createdAt: new Date().toISOString()
+            });
+        }
+        
+        return locations;
+    }
+    
+    module.exports = { parseKMLNode, generateObjectId };
+}
+
+// Auto-run on page load
+window.onload = () => {
+    parseKML();
+};
+</script>
+
+</body>
+</html>
