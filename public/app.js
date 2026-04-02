@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════
-   URBEX·DB — app.js (FIXED)
+   URBEX·DB — app.js (UPDATED with coordinate pasting)
    ═══════════════════════════════════════════ */
 
 'use strict';
@@ -99,6 +99,26 @@ const Api = {
     return res.json();
   }
 };
+
+// ─── COORDINATE PARSING ───────────────────────
+function parseCoordinates(input) {
+  // Pattern: match two numbers (can be negative, with optional decimal)
+  // Format: xx.xxxxxxx xx.xxxxxxx (or xx.xxxxxxx, xx.xxxxxxx)
+  const pattern = /(-?\d+\.?\d*)\s*[,\s]+\s*(-?\d+\.?\d*)/;
+  const match = input.trim().match(pattern);
+  
+  if (!match) return null;
+  
+  let lat = parseFloat(match[1]);
+  let lng = parseFloat(match[2]);
+  
+  // Validate coordinates
+  if (isNaN(lat) || isNaN(lng)) return null;
+  if (lat < -90 || lat > 90) return null;
+  if (lng < -180 || lng > 180) return null;
+  
+  return { lat, lng };
+}
 
 // ─── TOAST ────────────────────────────────────
 function toast(msg, type = 'info', duration = 2800) {
@@ -315,6 +335,107 @@ function openFormModal(id = null, lat = '', lng = '') {
   }
 
   openModal('form-modal');
+}
+
+// ─── COORDINATE PASTE HANDLER ─────────────────
+function setupCoordinatePaste() {
+  const latInput = document.getElementById('f-lat');
+  const lngInput = document.getElementById('f-lng');
+  
+  if (!latInput || !lngInput) return;
+  
+  // Create a container for paste hint
+  const pasteHint = document.createElement('div');
+  pasteHint.className = 'paste-hint';
+  pasteHint.textContent = '📋 Paste coordinates (xx.xxxxxxx xx.xxxxxxx)';
+  pasteHint.style.cssText = `
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dimmer);
+    margin-top: -8px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: color var(--transition);
+  `;
+  
+  // Insert hint after the coordinates row
+  const coordsRow = document.querySelector('.coords-row');
+  if (coordsRow && coordsRow.parentNode) {
+    coordsRow.parentNode.insertBefore(pasteHint, coordsRow.nextSibling);
+    
+    pasteHint.addEventListener('click', () => {
+      // Try to paste from clipboard
+      navigator.clipboard.readText().then(text => {
+        const coords = parseCoordinates(text);
+        if (coords) {
+          latInput.value = coords.lat.toFixed(6);
+          lngInput.value = coords.lng.toFixed(6);
+          toast('Coordinates pasted! ✓', 'success');
+          // Optional: fly to coordinates on map
+          if (map) {
+            map.flyTo([coords.lat, coords.lng], 14, { duration: 0.8 });
+          }
+        } else {
+          toast('Invalid coordinates format. Use: xx.xxxxxxx xx.xxxxxxx', 'error');
+        }
+      }).catch(() => {
+        toast('Unable to read clipboard. Please paste manually.', 'error');
+      });
+    });
+  }
+  
+  // Add paste event listener to the form modal
+  const formModal = document.getElementById('form-modal');
+  if (formModal) {
+    formModal.addEventListener('paste', (e) => {
+      // Only handle if focus is not on input fields (or we can handle globally)
+      const target = e.target;
+      if (target === latInput || target === lngInput) return;
+      
+      const pastedText = e.clipboardData.getData('text');
+      const coords = parseCoordinates(pastedText);
+      
+      if (coords) {
+        e.preventDefault();
+        latInput.value = coords.lat.toFixed(6);
+        lngInput.value = coords.lng.toFixed(6);
+        toast('Coordinates pasted! ✓', 'success');
+        if (map) {
+          map.flyTo([coords.lat, coords.lng], 14, { duration: 0.8 });
+        }
+      }
+    });
+  }
+  
+  // Add keyboard shortcut (Cmd/Ctrl + V) when modal is open
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'v') {
+      const formModal = document.getElementById('form-modal');
+      if (formModal && !formModal.classList.contains('hidden')) {
+        // Check if focus is not on an input field
+        const activeElement = document.activeElement;
+        if (!activeElement || (activeElement !== latInput && activeElement !== lngInput && 
+            activeElement.tagName !== 'INPUT' && activeElement.tagName !== 'TEXTAREA')) {
+          e.preventDefault();
+          navigator.clipboard.readText().then(text => {
+            const coords = parseCoordinates(text);
+            if (coords) {
+              latInput.value = coords.lat.toFixed(6);
+              lngInput.value = coords.lng.toFixed(6);
+              toast('Coordinates pasted! ✓', 'success');
+              if (map) {
+                map.flyTo([coords.lat, coords.lng], 14, { duration: 0.8 });
+              }
+            } else {
+              toast('Invalid coordinates format. Use: xx.xxxxxxx xx.xxxxxxx', 'error');
+            }
+          }).catch(() => {
+            toast('Unable to read clipboard', 'error');
+          });
+        }
+      }
+    }
+  });
 }
 
 async function handleFormSubmit() {
@@ -680,6 +801,9 @@ document.addEventListener('DOMContentLoaded', () => {
       applySearch('');
     });
   }
+  
+  // Setup coordinate paste functionality
+  setupCoordinatePaste();
 });
 
 // ─── INIT ─────────────────────────────────────
