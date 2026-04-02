@@ -21,6 +21,6 @@
     }
   ],
   "env": {
-    "MONGO_URI": "@mongodb_uri"
+    "MONGO_URI": "mongodb+srv://dbuser1:vDtVYSXh91ALqzYU@urbexcluster1.udybl2z.mongodb.net/urbexdb?retryWrites=true&w=majority"
   }
 }
