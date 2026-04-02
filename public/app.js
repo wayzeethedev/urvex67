@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════
-   URBEX·DB — app.js
+   URBEX·DB — app.js (FIXED)
    ═══════════════════════════════════════════ */
 
 'use strict';
@@ -56,8 +56,11 @@ const Cache = {
       const raw = localStorage.getItem(CACHE_KEY);
       if (!raw) return;
       const obj = JSON.parse(raw);
-      obj.data.push(loc);
-      localStorage.setItem(CACHE_KEY, JSON.stringify(obj));
+      // Make sure we're not adding duplicates
+      if (!obj.data.some(l => l._id === loc._id)) {
+        obj.data.push(loc);
+        localStorage.setItem(CACHE_KEY, JSON.stringify(obj));
+      }
     } catch {}
   }
 };
@@ -84,7 +87,10 @@ const Api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
-    if (!res.ok) throw new Error(`PATCH ${path} failed: ${res.status}`);
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`PATCH ${path} failed: ${res.status} - ${errorText}`);
+    }
     return res.json();
   },
   async delete(path) {
@@ -109,13 +115,19 @@ function toast(msg, type = 'info', duration = 2800) {
 
 // ─── MODAL HELPERS ────────────────────────────
 function openModal(id) {
-  document.getElementById(id).classList.remove('hidden');
-  document.getElementById(id).addEventListener('mousedown', function outsideClose(e) {
-    if (e.target === this) { closeModal(id); this.removeEventListener('mousedown', outsideClose); }
+  const modal = document.getElementById(id);
+  if (!modal) return;
+  modal.classList.remove('hidden');
+  modal.addEventListener('mousedown', function outsideClose(e) {
+    if (e.target === this) { 
+      closeModal(id); 
+      this.removeEventListener('mousedown', outsideClose); 
+    }
   });
 }
 function closeModal(id) {
-  document.getElementById(id).classList.add('hidden');
+  const modal = document.getElementById(id);
+  if (modal) modal.classList.add('hidden');
 }
 
 // ─── MARKER ICONS (BETTER STYLING) ─────────────────────────────
@@ -158,7 +170,6 @@ function initMap() {
 
   L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
-  // NO CLUSTERING - markers added directly to map
   // Add mode click
   map.on('click', e => {
     if (!isAddMode) return;
@@ -199,19 +210,22 @@ function updateMarkerIcon(id) {
 }
 
 function updateCount() {
-  document.getElementById('location-count').textContent =
-    `${locations.length} site${locations.length !== 1 ? 's' : ''}`;
+  const countEl = document.getElementById('location-count');
+  if (countEl) {
+    countEl.textContent = `${locations.length} site${locations.length !== 1 ? 's' : ''}`;
+  }
 }
 
 // ─── LOAD LOCATIONS ───────────────────────────
 async function loadLocations() {
   const overlay = document.getElementById('loading-overlay');
+  if (overlay) overlay.classList.remove('hidden');
 
   const cached = Cache.get();
   if (cached) {
     locations = cached;
     renderMarkers();
-    overlay.classList.add('hidden');
+    if (overlay) overlay.classList.add('hidden');
     // Background refresh
     fetchAndRefresh();
     return;
@@ -226,7 +240,7 @@ async function loadLocations() {
     toast('Failed to load locations', 'error');
     console.error(err);
   } finally {
-    overlay.classList.add('hidden');
+    if (overlay) overlay.classList.add('hidden');
   }
 }
 
@@ -244,15 +258,21 @@ async function fetchAndRefresh() {
 // ─── ADD MODE ─────────────────────────────────
 function enterAddMode() {
   isAddMode = true;
-  document.getElementById('map').classList.add('add-mode');
-  document.getElementById('add-mode-banner').classList.remove('hidden');
-  document.getElementById('fab-add').classList.add('active-mode');
+  const mapEl = document.getElementById('map');
+  const banner = document.getElementById('add-mode-banner');
+  const fab = document.getElementById('fab-add');
+  if (mapEl) mapEl.classList.add('add-mode');
+  if (banner) banner.classList.remove('hidden');
+  if (fab) fab.classList.add('active-mode');
 }
 function exitAddMode() {
   isAddMode = false;
-  document.getElementById('map').classList.remove('add-mode');
-  document.getElementById('add-mode-banner').classList.add('hidden');
-  document.getElementById('fab-add').classList.remove('active-mode');
+  const mapEl = document.getElementById('map');
+  const banner = document.getElementById('add-mode-banner');
+  const fab = document.getElementById('fab-add');
+  if (mapEl) mapEl.classList.remove('add-mode');
+  if (banner) banner.classList.add('hidden');
+  if (fab) fab.classList.remove('active-mode');
 }
 
 // ─── FORM MODAL ───────────────────────────────
@@ -263,40 +283,55 @@ function openFormModal(id = null, lat = '', lng = '') {
 
   if (id) {
     const loc = locations.find(l => l._id === id);
-    if (!loc) return;
-    title.textContent = 'EDIT LOCATION';
-    submitBtn.textContent = 'Save Changes';
-    document.getElementById('f-title').value = loc.title || '';
-    document.getElementById('f-desc').value = loc.description || '';
-    document.getElementById('f-image').value = loc.imageUrl || '';
-    document.getElementById('f-lat').value = loc.latitude || '';
-    document.getElementById('f-lng').value = loc.longitude || '';
+    if (!loc) {
+      toast('Location not found', 'error');
+      return;
+    }
+    if (title) title.textContent = 'EDIT LOCATION';
+    if (submitBtn) submitBtn.textContent = 'Save Changes';
+    const fTitle = document.getElementById('f-title');
+    const fDesc = document.getElementById('f-desc');
+    const fImage = document.getElementById('f-image');
+    const fLat = document.getElementById('f-lat');
+    const fLng = document.getElementById('f-lng');
+    if (fTitle) fTitle.value = loc.title || '';
+    if (fDesc) fDesc.value = loc.description || '';
+    if (fImage) fImage.value = loc.imageUrl || '';
+    if (fLat) fLat.value = loc.latitude || '';
+    if (fLng) fLng.value = loc.longitude || '';
   } else {
-    title.textContent = 'ADD LOCATION';
-    submitBtn.textContent = 'Save Location';
-    document.getElementById('f-title').value = '';
-    document.getElementById('f-desc').value = '';
-    document.getElementById('f-image').value = '';
-    document.getElementById('f-lat').value = lat !== '' ? Number(lat).toFixed(6) : '';
-    document.getElementById('f-lng').value = lng !== '' ? Number(lng).toFixed(6) : '';
+    if (title) title.textContent = 'ADD LOCATION';
+    if (submitBtn) submitBtn.textContent = 'Save Location';
+    const fTitle = document.getElementById('f-title');
+    const fDesc = document.getElementById('f-desc');
+    const fImage = document.getElementById('f-image');
+    const fLat = document.getElementById('f-lat');
+    const fLng = document.getElementById('f-lng');
+    if (fTitle) fTitle.value = '';
+    if (fDesc) fDesc.value = '';
+    if (fImage) fImage.value = '';
+    if (fLat) fLat.value = lat !== '' ? Number(lat).toFixed(6) : '';
+    if (fLng) fLng.value = lng !== '' ? Number(lng).toFixed(6) : '';
   }
 
   openModal('form-modal');
 }
 
 async function handleFormSubmit() {
-  const title = document.getElementById('f-title').value.trim();
-  const description = document.getElementById('f-desc').value.trim();
-  const imageUrl = document.getElementById('f-image').value.trim();
-  const latitude = parseFloat(document.getElementById('f-lat').value);
-  const longitude = parseFloat(document.getElementById('f-lng').value);
+  const title = document.getElementById('f-title')?.value.trim();
+  const description = document.getElementById('f-desc')?.value.trim();
+  const imageUrl = document.getElementById('f-image')?.value.trim();
+  const latitude = parseFloat(document.getElementById('f-lat')?.value);
+  const longitude = parseFloat(document.getElementById('f-lng')?.value);
 
   if (!title) { toast('Title is required', 'error'); return; }
   if (isNaN(latitude) || isNaN(longitude)) { toast('Valid coordinates required', 'error'); return; }
 
   const btn = document.getElementById('form-submit');
-  btn.disabled = true;
-  btn.textContent = 'Saving…';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+  }
 
   try {
     if (editingId) {
@@ -307,6 +342,12 @@ async function handleFormSubmit() {
       updateMarkerIcon(editingId);
       // Update position if coords changed
       if (markerMap[editingId]) markerMap[editingId].setLatLng([updated.latitude, updated.longitude]);
+      
+      // Update currentLocationId if this is the currently open location
+      if (currentLocationId === editingId) {
+        currentLocationId = updated._id;
+      }
+      
       toast('Location updated', 'success');
       closeModal('form-modal');
       openDetailModal(editingId);
@@ -328,7 +369,7 @@ async function handleFormSubmit() {
       marker.addTo(map);
       updateCount();
       toast('Location saved', 'success');
-      map.flyTo([created.latitude, created.longitude], 14, { duration: 0.8 });
+      if (map) map.flyTo([created.latitude, created.longitude], 14, { duration: 0.8 });
       closeModal('form-modal');
       openDetailModal(created._id);
     }
@@ -336,56 +377,87 @@ async function handleFormSubmit() {
     toast('Failed to save location', 'error');
     console.error(err);
   } finally {
-    btn.disabled = false;
-    btn.textContent = editingId ? 'Save Changes' : 'Save Location';
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = editingId ? 'Save Changes' : 'Save Location';
+    }
   }
 }
 
 // ─── DETAIL MODAL ─────────────────────────────
 function openDetailModal(id) {
+  // Find location using the provided ID
   const loc = locations.find(l => l._id === id);
-  if (!loc) return;
-  currentLocationId = id;
-
+  if (!loc) {
+    console.error('Location not found for ID:', id);
+    console.log('Available locations:', locations.map(l => ({ _id: l._id, title: l.title })));
+    toast('Location not found. Please refresh the page.', 'error');
+    return;
+  }
+  
+  // Store the actual location ID (use the one from the location object to ensure consistency)
+  currentLocationId = loc._id;
+  
   // Image
   const wrap = document.getElementById('detail-image-wrap');
   const img = document.getElementById('detail-image');
-  if (loc.imageUrl) {
-    img.src = loc.imageUrl;
-    img.onerror = () => { wrap.classList.add('no-image'); };
-    wrap.classList.remove('no-image');
-    wrap.style.display = '';
-  } else {
-    wrap.classList.add('no-image');
-    wrap.style.display = 'none';
+  if (wrap && img) {
+    if (loc.imageUrl && loc.imageUrl.trim()) {
+      img.src = loc.imageUrl;
+      img.onerror = () => { 
+        if (wrap) wrap.classList.add('no-image'); 
+      };
+      wrap.classList.remove('no-image');
+      wrap.style.display = '';
+    } else {
+      wrap.classList.add('no-image');
+      wrap.style.display = 'none';
+    }
   }
 
-  document.getElementById('detail-title').textContent = loc.title || 'Untitled';
-  document.getElementById('detail-desc').textContent = loc.description || 'No description.';
-  document.getElementById('detail-coords').textContent =
-    `${Number(loc.latitude).toFixed(6)}, ${Number(loc.longitude).toFixed(6)}`;
+  const titleEl = document.getElementById('detail-title');
+  const descEl = document.getElementById('detail-desc');
+  const coordsEl = document.getElementById('detail-coords');
+  
+  if (titleEl) titleEl.textContent = loc.title || 'Untitled';
+  if (descEl) descEl.textContent = loc.description || 'No description.';
+  if (coordsEl) coordsEl.textContent = `${Number(loc.latitude).toFixed(6)}, ${Number(loc.longitude).toFixed(6)}`;
 
   const badge = document.getElementById('detail-visited-badge');
   const toggleBtn = document.getElementById('detail-visited-toggle');
-  if (loc.visited) {
-    badge.textContent = 'VISITED';
-    badge.className = 'visited-badge visited';
-    toggleBtn.textContent = 'Mark as Unvisited';
-  } else {
-    badge.textContent = 'UNVISITED';
-    badge.className = 'visited-badge unvisited';
-    toggleBtn.textContent = 'Mark as Visited';
+  if (badge && toggleBtn) {
+    if (loc.visited) {
+      badge.textContent = 'VISITED';
+      badge.className = 'visited-badge visited';
+      toggleBtn.textContent = 'Mark as Unvisited';
+    } else {
+      badge.textContent = 'UNVISITED';
+      badge.className = 'visited-badge unvisited';
+      toggleBtn.textContent = 'Mark as Visited';
+    }
   }
 
   openModal('detail-modal');
 }
 
 async function toggleVisited() {
+  // Validate currentLocationId exists
+  if (!currentLocationId) {
+    toast('No location selected', 'error');
+    console.error('currentLocationId is null');
+    return;
+  }
+  
   const loc = locations.find(l => l._id === currentLocationId);
-  if (!loc) return;
+  if (!loc) {
+    toast('Location not found. Please refresh the page.', 'error');
+    console.error('Location not found with ID:', currentLocationId);
+    console.log('Available location IDs:', locations.map(l => l._id));
+    return;
+  }
 
   const btn = document.getElementById('detail-visited-toggle');
-  btn.disabled = true;
+  if (btn) btn.disabled = true;
 
   try {
     const updated = await Api.patch(`/locations/${currentLocationId}`, { visited: !loc.visited });
@@ -396,10 +468,10 @@ async function toggleVisited() {
     openDetailModal(currentLocationId); // re-render detail
     toast(updated.visited ? 'Marked as visited ✓' : 'Marked as unvisited', 'success');
   } catch (err) {
-    toast('Update failed', 'error');
-    console.error(err);
+    toast('Update failed: ' + err.message, 'error');
+    console.error('Error updating visited status:', err);
   } finally {
-    btn.disabled = false;
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -412,6 +484,11 @@ async function confirmDelete() {
   closeModal('confirm-modal');
   const id = currentLocationId;
 
+  if (!id) {
+    toast('No location selected', 'error');
+    return;
+  }
+
   try {
     await Api.delete(`/locations/${id}`);
     locations = locations.filter(l => l._id !== id);
@@ -422,6 +499,7 @@ async function confirmDelete() {
     }
     updateCount();
     closeModal('detail-modal');
+    currentLocationId = null; // Clear the current ID
     toast('Location deleted', 'info');
   } catch (err) {
     toast('Delete failed', 'error');
@@ -438,14 +516,15 @@ const debounce = (fn, delay) => {
 function applySearch(query) {
   searchQuery = query.toLowerCase().trim();
   const clearBtn = document.getElementById('search-clear');
-  clearBtn.style.display = searchQuery ? '' : 'none';
+  if (clearBtn) clearBtn.style.display = searchQuery ? '' : 'none';
 
   if (!searchQuery) {
     // Show all markers normally
     Object.values(markerMap).forEach(m => {
-      if (m.getElement()) {
-        m.getElement().style.opacity = '1';
-        m.getElement().style.filter = 'none';
+      const el = m.getElement();
+      if (el) {
+        el.style.opacity = '1';
+        el.style.filter = 'none';
       }
     });
     return;
@@ -467,7 +546,7 @@ function applySearch(query) {
   });
 
   // Pan to first result
-  if (matched.length === 1) {
+  if (matched.length === 1 && map) {
     map.flyTo([matched[0].latitude, matched[0].longitude], 14, { duration: 0.6 });
   }
 }
@@ -476,7 +555,9 @@ function applySearch(query) {
 function locateMe() {
   if (!navigator.geolocation) { toast('Geolocation not supported', 'error'); return; }
   navigator.geolocation.getCurrentPosition(
-    pos => map.flyTo([pos.coords.latitude, pos.coords.longitude], 14, { duration: 0.8 }),
+    pos => {
+      if (map) map.flyTo([pos.coords.latitude, pos.coords.longitude], 14, { duration: 0.8 });
+    },
     () => toast('Could not get location', 'error')
   );
 }
@@ -496,73 +577,109 @@ function openGoogleMaps() {
 // ─── LIGHTBOX ─────────────────────────────────
 function openLightbox(src) {
   if (!src) return;
-  document.getElementById('lightbox-img').src = src;
-  document.getElementById('lightbox').classList.remove('hidden');
+  const imgEl = document.getElementById('lightbox-img');
+  const lightbox = document.getElementById('lightbox');
+  if (imgEl) imgEl.src = src;
+  if (lightbox) lightbox.classList.remove('hidden');
 }
 function closeLightbox() {
-  document.getElementById('lightbox').classList.add('hidden');
+  const lightbox = document.getElementById('lightbox');
+  if (lightbox) lightbox.classList.add('hidden');
 }
 
 // ─── CLOSE MODAL DELEGATE ─────────────────────
 document.addEventListener('click', e => {
-  if (e.target.dataset.close) closeModal(e.target.dataset.close);
+  if (e.target.dataset?.close) closeModal(e.target.dataset.close);
 });
 
 // ─── KEYBOARD ─────────────────────────────────
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    if (!document.getElementById('lightbox').classList.contains('hidden')) { closeLightbox(); return; }
-    if (!document.getElementById('confirm-modal').classList.contains('hidden')) { closeModal('confirm-modal'); return; }
-    if (!document.getElementById('detail-modal').classList.contains('hidden')) { closeModal('detail-modal'); return; }
-    if (!document.getElementById('form-modal').classList.contains('hidden')) { closeModal('form-modal'); return; }
+    const lightbox = document.getElementById('lightbox');
+    const confirmModal = document.getElementById('confirm-modal');
+    const detailModal = document.getElementById('detail-modal');
+    const formModal = document.getElementById('form-modal');
+    
+    if (lightbox && !lightbox.classList.contains('hidden')) { 
+      closeLightbox(); 
+      return; 
+    }
+    if (confirmModal && !confirmModal.classList.contains('hidden')) { 
+      closeModal('confirm-modal'); 
+      return; 
+    }
+    if (detailModal && !detailModal.classList.contains('hidden')) { 
+      closeModal('detail-modal'); 
+      return; 
+    }
+    if (formModal && !formModal.classList.contains('hidden')) { 
+      closeModal('form-modal'); 
+      return; 
+    }
     if (isAddMode) exitAddMode();
   }
 });
 
 // ─── EVENT BINDINGS ───────────────────────────
-document.getElementById('fab-add').addEventListener('click', () => {
-  if (isAddMode) { exitAddMode(); } else { enterAddMode(); }
-});
-document.getElementById('cancel-add-mode').addEventListener('click', exitAddMode);
-document.getElementById('locate-btn').addEventListener('click', locateMe);
+document.addEventListener('DOMContentLoaded', () => {
+  const fabAdd = document.getElementById('fab-add');
+  const cancelAddMode = document.getElementById('cancel-add-mode');
+  const locateBtn = document.getElementById('locate-btn');
+  const formSubmit = document.getElementById('form-submit');
+  const formCancel = document.getElementById('form-cancel');
+  const detailVisitedToggle = document.getElementById('detail-visited-toggle');
+  const detailEdit = document.getElementById('detail-edit');
+  const detailDelete = document.getElementById('detail-delete');
+  const openAppleMapsBtn = document.getElementById('open-apple-maps');
+  const openGoogleMapsBtn = document.getElementById('open-google-maps');
+  const detailImageWrap = document.getElementById('detail-image-wrap');
+  const lightboxClose = document.getElementById('lightbox-close');
+  const lightboxBackdrop = document.getElementById('lightbox-backdrop');
+  const confirmOk = document.getElementById('confirm-ok');
+  const confirmCancel = document.getElementById('confirm-cancel');
+  const searchInput = document.getElementById('search-input');
+  const searchClear = document.getElementById('search-clear');
 
-document.getElementById('form-submit').addEventListener('click', handleFormSubmit);
-document.getElementById('form-cancel').addEventListener('click', () => closeModal('form-modal'));
-
-document.getElementById('detail-visited-toggle').addEventListener('click', toggleVisited);
-document.getElementById('detail-edit').addEventListener('click', () => {
-  closeModal('detail-modal');
-  openFormModal(currentLocationId);
-});
-document.getElementById('detail-delete').addEventListener('click', promptDelete);
-
-document.getElementById('open-apple-maps').addEventListener('click', openAppleMaps);
-document.getElementById('open-google-maps').addEventListener('click', openGoogleMaps);
-
-document.getElementById('detail-image-wrap').addEventListener('click', () => {
-  const src = document.getElementById('detail-image').src;
-  if (src) openLightbox(src);
-});
-
-document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
-document.getElementById('lightbox-backdrop').addEventListener('click', closeLightbox);
-
-document.getElementById('confirm-ok').addEventListener('click', confirmDelete);
-document.getElementById('confirm-cancel').addEventListener('click', () => closeModal('confirm-modal'));
-
-const searchInput = document.getElementById('search-input');
-searchInput.addEventListener('input', debounce(e => applySearch(e.target.value), 220));
-searchInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    const query = e.target.value.toLowerCase().trim();
-    if (!query) return;
-    const first = locations.find(l => l.title.toLowerCase().includes(query));
-    if (first) map.flyTo([first.latitude, first.longitude], 14, { duration: 0.7 });
+  if (fabAdd) fabAdd.addEventListener('click', () => {
+    if (isAddMode) { exitAddMode(); } else { enterAddMode(); }
+  });
+  if (cancelAddMode) cancelAddMode.addEventListener('click', exitAddMode);
+  if (locateBtn) locateBtn.addEventListener('click', locateMe);
+  if (formSubmit) formSubmit.addEventListener('click', handleFormSubmit);
+  if (formCancel) formCancel.addEventListener('click', () => closeModal('form-modal'));
+  if (detailVisitedToggle) detailVisitedToggle.addEventListener('click', toggleVisited);
+  if (detailEdit) detailEdit.addEventListener('click', () => {
+    closeModal('detail-modal');
+    openFormModal(currentLocationId);
+  });
+  if (detailDelete) detailDelete.addEventListener('click', promptDelete);
+  if (openAppleMapsBtn) openAppleMapsBtn.addEventListener('click', openAppleMaps);
+  if (openGoogleMapsBtn) openGoogleMapsBtn.addEventListener('click', openGoogleMaps);
+  if (detailImageWrap) detailImageWrap.addEventListener('click', () => {
+    const img = document.getElementById('detail-image');
+    if (img && img.src) openLightbox(img.src);
+  });
+  if (lightboxClose) lightboxClose.addEventListener('click', closeLightbox);
+  if (lightboxBackdrop) lightboxBackdrop.addEventListener('click', closeLightbox);
+  if (confirmOk) confirmOk.addEventListener('click', confirmDelete);
+  if (confirmCancel) confirmCancel.addEventListener('click', () => closeModal('confirm-modal'));
+  if (searchInput) {
+    searchInput.addEventListener('input', debounce(e => applySearch(e.target.value), 220));
+    searchInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        const query = e.target.value.toLowerCase().trim();
+        if (!query) return;
+        const first = locations.find(l => l.title.toLowerCase().includes(query));
+        if (first && map) map.flyTo([first.latitude, first.longitude], 14, { duration: 0.7 });
+      }
+    });
   }
-});
-document.getElementById('search-clear').addEventListener('click', () => {
-  searchInput.value = '';
-  applySearch('');
+  if (searchClear) {
+    searchClear.addEventListener('click', () => {
+      if (searchInput) searchInput.value = '';
+      applySearch('');
+    });
+  }
 });
 
 // ─── INIT ─────────────────────────────────────
