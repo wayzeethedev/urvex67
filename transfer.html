@@ -1,266 +1,522 @@
-// Complete HTML/JS solution to parse KML and generate MongoDB documents
-// Save this as an HTML file and open in browser, or run in Node.js
-
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>KML to MongoDB Converter</title>
-    <style>
-        body { font-family: monospace; padding: 20px; background: #f5f5f5; }
-        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }
-        textarea { width: 100%; height: 400px; font-family: monospace; font-size: 12px; margin: 10px 0; }
-        button { padding: 10px 20px; background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 10px 5px; }
-        button:hover { background: #0052a3; }
-        pre { background: #f0f0f0; padding: 15px; overflow-x: auto; border-radius: 4px; max-height: 500px; overflow-y: auto; }
-        .tab { margin-left: 20px; }
-        h3 { color: #333; margin-top: 20px; }
-        .stats { background: #e3f2fd; padding: 10px; border-radius: 4px; margin: 10px 0; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UrbexDB - Bulk Import Locations</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: linear-gradient(135deg, #0b2b1f 0%, #1a3a2a 100%);
+      margin: 0;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 1300px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: rgba(30, 30, 35, 0.95);
+      backdrop-filter: blur(2px);
+      border-radius: 2rem;
+      box-shadow: 0 25px 45px -12px rgba(0,0,0,0.5);
+      overflow: hidden;
+      border: 1px solid rgba(255,215,0,0.2);
+    }
+
+    .header {
+      background: #0f2120;
+      padding: 1.5rem 2rem;
+      border-bottom: 1px solid #2c4a3e;
+    }
+
+    .header h1 {
+      margin: 0 0 0.25rem 0;
+      font-size: 1.8rem;
+      color: #ffd966;
+      letter-spacing: -0.3px;
+    }
+
+    .header p {
+      margin: 0;
+      color: #b9e6d9;
+      font-size: 0.9rem;
+    }
+
+    .content {
+      padding: 2rem;
+    }
+
+    .info-box {
+      background: #1e2f2b;
+      border-radius: 1rem;
+      padding: 1rem 1.5rem;
+      margin-bottom: 1.8rem;
+      border-left: 5px solid #ffd966;
+      font-size: 0.9rem;
+      color: #d4ede4;
+    }
+
+    .info-box code {
+      background: #0a1a16;
+      padding: 0.2rem 0.4rem;
+      border-radius: 6px;
+      font-family: 'Fira Code', monospace;
+      color: #ffd966;
+    }
+
+    .two-columns {
+      display: flex;
+      gap: 2rem;
+      flex-wrap: wrap;
+    }
+
+    .editor-pane {
+      flex: 2;
+      min-width: 280px;
+    }
+
+    .preview-pane {
+      flex: 1.2;
+      min-width: 260px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 460px;
+      background: #0f1a17;
+      color: #e2f0ec;
+      border: 1px solid #3c5e52;
+      border-radius: 1rem;
+      padding: 1rem;
+      font-family: 'Fira Code', 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      resize: vertical;
+      outline: none;
+      transition: 0.2s;
+    }
+
+    textarea:focus {
+      border-color: #ffd966;
+      box-shadow: 0 0 0 2px rgba(255,217,102,0.3);
+    }
+
+    .button-group {
+      margin-top: 1.2rem;
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    button {
+      background: #2c5a4a;
+      border: none;
+      padding: 0.7rem 1.5rem;
+      border-radius: 3rem;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      color: white;
+      transition: 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    button.primary {
+      background: #ffb347;
+      color: #1e2f2b;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+    button.primary:hover {
+      background: #ffa01e;
+      transform: scale(1.01);
+    }
+
+    button.secondary {
+      background: #2a4b3f;
+      border: 1px solid #5c8b7a;
+    }
+
+    button.secondary:hover {
+      background: #3a6b59;
+    }
+
+    button.danger {
+      background: #6d3b2e;
+    }
+
+    button.danger:hover {
+      background: #8b4a3a;
+    }
+
+    .preview-card {
+      background: #162824;
+      border-radius: 1.2rem;
+      padding: 1rem;
+      border: 1px solid #2c5446;
+      max-height: 460px;
+      overflow-y: auto;
+    }
+
+    .preview-title {
+      font-weight: bold;
+      margin-bottom: 1rem;
+      color: #ffd966;
+      font-size: 1.1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      flex-wrap: wrap;
+    }
+
+    .preview-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .preview-list li {
+      background: #0e1f1b;
+      margin-bottom: 8px;
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 0.85rem;
+      border-left: 3px solid #ffb347;
+      font-family: monospace;
+      word-break: break-word;
+    }
+
+    .status-area {
+      margin-top: 1.5rem;
+      background: #0f1d19;
+      border-radius: 1rem;
+      padding: 1rem;
+      font-family: monospace;
+      font-size: 0.85rem;
+      border: 1px solid #2f5a4b;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+
+    .status-success {
+      color: #a5e0b2;
+    }
+
+    .status-error {
+      color: #ffaa99;
+    }
+
+    .status-info {
+      color: #ffd966;
+    }
+
+    .badge {
+      background: #2c5a4a;
+      border-radius: 20px;
+      padding: 2px 8px;
+      font-size: 0.7rem;
+      font-weight: normal;
+    }
+
+    hr {
+      border-color: #2c5446;
+      margin: 1rem 0;
+    }
+
+    @media (max-width: 760px) {
+      .content { padding: 1rem; }
+      .header h1 { font-size: 1.4rem; }
+    }
+  </style>
 </head>
 <body>
 <div class="container">
-    <h1>KML to MongoDB Document Converter</h1>
-    <p>Convert your KML file to MongoDB documents matching your example format</p>
-    
-    <div class="stats" id="stats"></div>
-    
-    <button onclick="parseKML()">Parse KML and Generate MongoDB Documents</button>
-    <button onclick="copyToClipboard()">Copy to Clipboard</button>
-    <button onclick="downloadJSON()">Download as JSON</button>
-    
-    <h3>Generated MongoDB Documents (JSON format):</h3>
-    <pre id="output"></pre>
+  <div class="card">
+    <div class="header">
+      <h1>🏚️ UrbexDB · Bulk Import</h1>
+      <p>Paste JSON array → auto-import with fresh MongoDB ObjectIds (ignoring old _id)</p>
+    </div>
+    <div class="content">
+      <div class="info-box">
+        📋 <strong>Expected format:</strong> array of objects. Fields: <code>title</code>, <code>description</code>, <code>imageUrl</code>, <code>latitude</code>, <code>longitude</code>, <code>visited</code> (optional).<br>
+        ✨ <strong>Auto-handled:</strong> <code>_id</code> and <code>createdAt</code> are generated by the server. Any existing <code>_id</code> in your JSON will be <strong>ignored</strong>.
+      </div>
+
+      <div class="two-columns">
+        <div class="editor-pane">
+          <textarea id="jsonInput" placeholder='[
+  {
+    "_id": "69cd5568ab3f52806ccd",
+    "title": "Ellsworth Schoolhouse",
+    "description": "No description",
+    "imageUrl": "",
+    "latitude": 44.77068879999999,
+    "longitude": -92.5175694,
+    "visited": false,
+    "createdAt": "2026-04-01T17:27:04.192Z"
+  },
+  {
+    "title": "Abandoned Factory",
+    "description": "Old steel mill",
+    "latitude": 45.12345,
+    "longitude": -93.98765,
+    "visited": true
+  }
+]'></textarea>
+          <div class="button-group">
+            <button id="importBtn" class="primary">🚀 Import to Database</button>
+            <button id="clearBtn" class="secondary">🗑️ Clear Editor</button>
+            <button id="sampleBtn" class="secondary">📋 Load Sample</button>
+          </div>
+        </div>
+        <div class="preview-pane">
+          <div class="preview-card">
+            <div class="preview-title">
+              <span>🔍 Preview (first 5 items)</span>
+              <span class="badge" id="itemCountBadge">0 items</span>
+            </div>
+            <ul id="previewList" class="preview-list">
+              <li style="color:#7faa9b;">No JSON parsed yet</li>
+            </ul>
+            <small style="color:#7faa9b; display:block; margin-top:8px;">* _id fields will be regenerated</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="status-area" id="statusLog">
+        <div class="status-info">⚡ Ready — paste JSON and hit import.</div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
-// Your KML data (paste the full KML content here or load from file)
-const kmlData = `<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
-<Document id="1_esubkYWTJiiVcRwbTeeq_3Rqgxwhfoa">
-	<name>Urbex</name>
-	<!-- ... rest of your KML content ... -->
-</Document>
-</kml>`;
+  const jsonInput = document.getElementById('jsonInput');
+  const importBtn = document.getElementById('importBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const sampleBtn = document.getElementById('sampleBtn');
+  const previewList = document.getElementById('previewList');
+  const itemCountBadge = document.getElementById('itemCountBadge');
+  const statusLog = document.getElementById('statusLog');
 
-// Function to parse KML and extract all Placemark locations
-function parseKML() {
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(kmlData, "text/xml");
-    
-    // Get all Placemark elements
-    const placemarks = xmlDoc.getElementsByTagName("Placemark");
-    const locations = [];
-    
-    for (let i = 0; i < placemarks.length; i++) {
-        const placemark = placemarks[i];
-        
-        // Extract name
-        const nameElement = placemark.getElementsByTagName("name")[0];
-        const name = nameElement ? nameElement.textContent : "Unknown";
-        
-        // Extract description (if exists)
-        const descElement = placemark.getElementsByTagName("description")[0];
-        let description = "";
-        if (descElement) {
-            // Clean up CDATA and HTML
-            let descText = descElement.textContent;
-            descText = descText.replace(/<!\[CDATA\[|\]\]>/g, '');
-            // Remove HTML tags
-            descText = descText.replace(/<[^>]*>/g, '');
-            description = descText.trim();
-        }
-        
-        // Extract coordinates
-        const pointElement = placemark.getElementsByTagName("Point")[0];
-        if (!pointElement) continue;
-        
-        const coordsElement = pointElement.getElementsByTagName("coordinates")[0];
-        if (!coordsElement) continue;
-        
-        let coords = coordsElement.textContent.trim();
-        // Remove altitude if present
-        const coordParts = coords.split(',');
-        let longitude = parseFloat(coordParts[0]);
-        let latitude = parseFloat(coordParts[1]);
-        
-        // Skip if coordinates are invalid
-        if (isNaN(longitude) || isNaN(latitude)) continue;
-        
-        // Look for imageUrl in gx:Carousel if exists
-        let imageUrl = "";
-        const carouselElement = placemark.getElementsByTagName("gx:Carousel")[0];
-        if (carouselElement) {
-            const imageElement = carouselElement.getElementsByTagName("gx:Image")[0];
-            if (imageElement) {
-                const imgUrlElement = imageElement.getElementsByTagName("gx:imageUrl")[0];
-                if (imgUrlElement) {
-                    imageUrl = imgUrlElement.textContent;
-                    // Clean up the URL
-                    imageUrl = imageUrl.split('?')[0];
-                }
-            }
-        }
-        
-        // If no image found, try to use a default or leave empty
-        if (!imageUrl) {
-            imageUrl = "";
-        }
-        
-        // Create MongoDB document
-        const location = {
-            _id: generateObjectId(),
-            title: name,
-            description: description || "No description",
-            imageUrl: imageUrl,
-            latitude: latitude,
-            longitude: longitude,
-            visited: false, // Default to false
-            createdAt: new Date().toISOString()
-        };
-        
-        locations.push(location);
+  // Helper: add status message
+  function addStatus(message, type = 'info') {
+    const div = document.createElement('div');
+    div.className = type === 'error' ? 'status-error' : (type === 'success' ? 'status-success' : 'status-info');
+    div.textContent = `› ${new Date().toLocaleTimeString()} — ${message}`;
+    statusLog.appendChild(div);
+    div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    // keep last 30 logs, remove older
+    while (statusLog.children.length > 35) statusLog.removeChild(statusLog.firstChild);
+  }
+
+  // update preview & count
+  function updatePreview() {
+    let raw = jsonInput.value.trim();
+    if (!raw) {
+      previewList.innerHTML = '<li style="color:#7faa9b;">📭 Empty — paste JSON array</li>';
+      itemCountBadge.textContent = '0 items';
+      return;
     }
-    
-    // Display stats
-    const statsDiv = document.getElementById('stats');
-    statsDiv.innerHTML = `<strong>✅ Found ${locations.length} locations</strong><br>
-                          <span class="tab">• Locations with names: ${locations.filter(l => l.title !== "Unknown").length}</span><br>
-                          <span class="tab">• Locations with descriptions: ${locations.filter(l => l.description && l.description !== "No description").length}</span><br>
-                          <span class="tab">• Locations with images: ${locations.filter(l => l.imageUrl).length}</span>`;
-    
-    // Display the MongoDB documents
-    displayMongoDocuments(locations);
-    
-    // Store for download
-    window.currentLocations = locations;
-    
-    return locations;
-}
 
-// Generate a MongoDB-like ObjectId (simplified)
-function generateObjectId() {
-    const timestamp = Math.floor(Date.now() / 1000).toString(16);
-    const random = Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
-    const counter = Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
-    return timestamp + random + counter;
-}
-
-// Display MongoDB documents in various formats
-function displayMongoDocuments(locations) {
-    const outputDiv = document.getElementById('output');
-    
-    // Format as MongoDB insertMany statement
-    let mongoOutput = "// MongoDB Insert Statements\n\n";
-    mongoOutput += "// Method 1: Insert one by one\n";
-    mongoOutput += "// Use in MongoDB shell or MongoDB Compass\n\n";
-    
-    // Individual insert statements
-    for (let i = 0; i < Math.min(locations.length, 50); i++) {
-        const loc = locations[i];
-        mongoOutput += `db.locations.insertOne(${JSON.stringify(loc, null, 2)});\n\n`;
-    }
-    
-    if (locations.length > 50) {
-        mongoOutput += `// ... and ${locations.length - 50} more locations\n\n`;
-    }
-    
-    // Insert many statement
-    mongoOutput += "// Method 2: Insert all at once (recommended)\n";
-    mongoOutput += `db.locations.insertMany(${JSON.stringify(locations, null, 2)});\n`;
-    
-    outputDiv.textContent = mongoOutput;
-}
-
-// Copy to clipboard function
-function copyToClipboard() {
-    const output = document.getElementById('output').textContent;
-    navigator.clipboard.writeText(output).then(() => {
-        alert('Copied to clipboard!');
-    }).catch(err => {
-        console.error('Failed to copy: ', err);
-        alert('Failed to copy to clipboard');
-    });
-}
-
-// Download as JSON file
-function downloadJSON() {
-    if (!window.currentLocations) {
-        alert('Please parse the KML first!');
+    try {
+      let parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        previewList.innerHTML = '<li style="color:#ffaa99;">❌ Error: JSON is not an array</li>';
+        itemCountBadge.textContent = 'invalid';
         return;
-    }
-    
-    const dataStr = JSON.stringify(window.currentLocations, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    
-    const exportFileDefaultName = `locations_${new Date().toISOString().slice(0,19)}.json`;
-    
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
-}
+      }
 
-// For Node.js usage (if you want to run server-side)
-if (typeof module !== 'undefined' && module.exports) {
-    // Node.js version
-    const fs = require('fs');
-    const { DOMParser } = require('xmldom');
-    
-    function parseKMLNode(filePath) {
-        const kmlString = fs.readFileSync(filePath, 'utf8');
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(kmlString, "text/xml");
-        
-        const placemarks = xmlDoc.getElementsByTagName("Placemark");
-        const locations = [];
-        
-        for (let i = 0; i < placemarks.length; i++) {
-            const placemark = placemarks[i];
-            
-            const nameElement = placemark.getElementsByTagName("name")[0];
-            const name = nameElement ? nameElement.textContent : "Unknown";
-            
-            const descElement = placemark.getElementsByTagName("description")[0];
-            let description = "";
-            if (descElement) {
-                description = descElement.textContent.replace(/<!\[CDATA\[|\]\]>/g, '').replace(/<[^>]*>/g, '').trim();
-            }
-            
-            const pointElement = placemark.getElementsByTagName("Point")[0];
-            if (!pointElement) continue;
-            
-            const coordsElement = pointElement.getElementsByTagName("coordinates")[0];
-            if (!coordsElement) continue;
-            
-            const coordParts = coordsElement.textContent.trim().split(',');
-            const longitude = parseFloat(coordParts[0]);
-            const latitude = parseFloat(coordParts[1]);
-            
-            if (isNaN(longitude) || isNaN(latitude)) continue;
-            
-            locations.push({
-                _id: generateObjectId(),
-                title: name,
-                description: description || "No description",
-                imageUrl: "",
-                latitude: latitude,
-                longitude: longitude,
-                visited: false,
-                createdAt: new Date().toISOString()
-            });
+      itemCountBadge.textContent = `${parsed.length} item${parsed.length !== 1 ? 's' : ''}`;
+      if (parsed.length === 0) {
+        previewList.innerHTML = '<li>⚠️ Array is empty</li>';
+        return;
+      }
+
+      const previewItems = parsed.slice(0, 5);
+      previewList.innerHTML = previewItems.map((item, idx) => {
+        const title = item.title || '(missing title)';
+        const lat = item.latitude ?? '?';
+        const lng = item.longitude ?? '?';
+        return `<li><strong>${escapeHtml(String(title).substring(0, 38))}</strong><br>
+                <span style="font-size:0.7rem;">📍 ${lat}, ${lng} &nbsp;| visited: ${item.visited === true ? '✓' : '✗'}</span></li>`;
+      }).join('');
+      if (parsed.length > 5) {
+        previewList.innerHTML += `<li style="opacity:0.7;">+ ${parsed.length - 5} more items ...</li>`;
+      }
+    } catch (e) {
+      previewList.innerHTML = `<li style="color:#ffaa99;">❌ JSON parse error: ${escapeHtml(e.message)}</li>`;
+      itemCountBadge.textContent = 'error';
+    }
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, function(m) {
+      if (m === '&') return '&amp;';
+      if (m === '<') return '&lt;';
+      if (m === '>') return '&gt;';
+      return m;
+    });
+  }
+
+  // Core: send batch to POST /api/locations/bulk
+  async function importLocations() {
+    const rawJson = jsonInput.value.trim();
+    if (!rawJson) {
+      addStatus('❌ No JSON provided. Paste your locations array.', 'error');
+      return;
+    }
+
+    let locationsArray;
+    try {
+      locationsArray = JSON.parse(rawJson);
+      if (!Array.isArray(locationsArray)) {
+        throw new Error('Root must be an array of location objects');
+      }
+    } catch (err) {
+      addStatus(`JSON parse failed: ${err.message}`, 'error');
+      return;
+    }
+
+    if (locationsArray.length === 0) {
+      addStatus('⚠️ Array is empty. Nothing to import.', 'error');
+      return;
+    }
+
+    // Validate each item: require title + lat/lng
+    const validationErrors = [];
+    for (let i = 0; i < locationsArray.length; i++) {
+      const loc = locationsArray[i];
+      if (!loc.title || typeof loc.title !== 'string' || loc.title.trim() === '') {
+        validationErrors.push(`Item ${i}: missing or invalid "title"`);
+      }
+      if (loc.latitude === undefined || loc.longitude === undefined) {
+        validationErrors.push(`Item ${i}: missing "latitude" or "longitude"`);
+      }
+      if (typeof loc.latitude !== 'number' || typeof loc.longitude !== 'number') {
+        if (loc.latitude !== undefined && loc.longitude !== undefined)
+          validationErrors.push(`Item ${i}: latitude/longitude must be numbers`);
+      }
+    }
+
+    if (validationErrors.length > 0) {
+      addStatus(`Validation failed: ${validationErrors.slice(0, 5).join('; ')}${validationErrors.length > 5 ? '...' : ''}`, 'error');
+      return;
+    }
+
+    // Clean each object: keep only fields that matter, remove _id / createdAt / __v
+    const cleanedBatch = locationsArray.map(item => {
+      const clean = {
+        title: String(item.title).trim(),
+        description: item.description ? String(item.description).trim() : '',
+        imageUrl: item.imageUrl ? String(item.imageUrl).trim() : '',
+        latitude: Number(item.latitude),
+        longitude: Number(item.longitude),
+        visited: item.visited === true || item.visited === 'true' ? true : false
+      };
+      // if visited is explicitly false keep false, else default false from spec
+      return clean;
+    });
+
+    addStatus(`📤 Sending ${cleanedBatch.length} location(s) to server (bulk import)...`, 'info');
+    importBtn.disabled = true;
+    importBtn.textContent = '⏳ Importing...';
+
+    try {
+      const response = await fetch('/api/locations/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locations: cleanedBatch })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || `HTTP ${response.status}: ${result.message || 'Bulk import failed'}`);
+      }
+
+      if (result.success) {
+        addStatus(`✅ SUCCESS: ${result.insertedCount} locations imported. ${result.errors?.length ? `Warnings: ${result.errors.length}` : ''}`, 'success');
+        if (result.insertedIds && result.insertedIds.length) {
+          addStatus(`🆕 New IDs generated: ${result.insertedIds.slice(0, 3).join(', ')}${result.insertedIds.length > 3 ? '...' : ''}`, 'info');
         }
-        
-        return locations;
+        // optional: refresh preview but keep data
+        addStatus(`✨ All _id fields were regenerated by MongoDB.`, 'success');
+      } else {
+        addStatus(`⚠️ Partial / error: ${result.error || 'Unknown error'}`, 'error');
+      }
+    } catch (err) {
+      addStatus(`🔥 Import failed: ${err.message}`, 'error');
+      console.error(err);
+    } finally {
+      importBtn.disabled = false;
+      importBtn.textContent = '🚀 Import to Database';
     }
-    
-    module.exports = { parseKMLNode, generateObjectId };
-}
+  }
 
-// Auto-run on page load
-window.onload = () => {
-    parseKML();
-};
+  // sample data loader
+  function loadSample() {
+    const sample = [
+      {
+        "_id": "69cd5568ab3f52806ccd",
+        "title": "Ellsworth Schoolhouse",
+        "description": "No description",
+        "imageUrl": "",
+        "latitude": 44.77068879999999,
+        "longitude": -92.5175694,
+        "visited": false,
+        "createdAt": "2026-04-01T17:27:04.192Z"
+      },
+      {
+        "title": "Whispering Pines Sanatorium",
+        "description": "Abandoned TB clinic",
+        "imageUrl": "https://example.com/pine.jpg",
+        "latitude": 41.878113,
+        "longitude": -87.629799,
+        "visited": true
+      },
+      {
+        "title": "Rust Belt Factory",
+        "description": "Old steel plant",
+        "latitude": 42.331429,
+        "longitude": -83.045753,
+        "visited": false
+      }
+    ];
+    jsonInput.value = JSON.stringify(sample, null, 2);
+    updatePreview();
+    addStatus('📋 Sample JSON loaded (includes legacy _id + createdAt — they will be stripped on import)', 'info');
+  }
+
+  // clear editor
+  function clearEditor() {
+    jsonInput.value = '';
+    updatePreview();
+    addStatus('🗑️ Editor cleared', 'info');
+  }
+
+  // event listeners
+  importBtn.addEventListener('click', importLocations);
+  clearBtn.addEventListener('click', clearEditor);
+  sampleBtn.addEventListener('click', loadSample);
+  jsonInput.addEventListener('input', updatePreview);
+
+  // initial preview
+  updatePreview();
+
+  // also handle helpful tip for bulk endpoint
+  addStatus('💡 Tip: The API now supports POST /api/locations/bulk for batch insert. Old _id ignored.', 'info');
 </script>
-
 </body>
 </html>

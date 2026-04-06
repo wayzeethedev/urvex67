@@ -1,7 +1,6 @@
 // /api/locations.js
 // Handles: GET /api/locations
 //          POST /api/locations
-//          POST /api/locations/bulk   (NEW: batch import, auto-generates _id)
 //          PATCH /api/locations/:id
 //          DELETE /api/locations/:id
 
@@ -41,11 +40,6 @@ module.exports = async function handler(req, res) {
   const idMatch = url.match(/\/api\/locations\/([^?/]+)/);
   const id = idMatch ? idMatch[1] : null;
 
-  // Special handling for bulk import endpoint: POST /api/locations/bulk
-  if (method === 'POST' && url === '/api/locations/bulk') {
-    return await handleBulkImport(req, res);
-  }
-
   try {
     const col = await getDb();
 
@@ -55,7 +49,7 @@ module.exports = async function handler(req, res) {
       return res.status(200).json(docs.map(serializeDoc));
     }
 
-    // ── POST create location (single) ──────────
+    // ── POST create location ───────────────────
     if (method === 'POST') {
       const { title, description, imageUrl, latitude, longitude } = req.body;
 
@@ -122,85 +116,6 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'Internal server error', detail: err.message });
   }
 };
-
-// ── BULK IMPORT handler (ignores incoming _id & createdAt) ──
-async function handleBulkImport(req, res) {
-  try {
-    const col = await getDb();
-    const { locations } = req.body;
-
-    if (!locations || !Array.isArray(locations)) {
-      return res.status(400).json({ error: 'Invalid payload: expected { locations: [] }' });
-    }
-
-    if (locations.length === 0) {
-      return res.status(400).json({ error: 'Locations array cannot be empty' });
-    }
-
-    // Validate and sanitize each location
-    const sanitizedDocs = [];
-    const errors = [];
-
-    for (let i = 0; i < locations.length; i++) {
-      const loc = locations[i];
-      
-      // Required fields validation
-      if (!loc.title || typeof loc.title !== 'string' || loc.title.trim() === '') {
-        errors.push(`Item ${i}: missing or invalid title`);
-        continue;
-      }
-      if (loc.latitude === undefined || loc.longitude === undefined) {
-        errors.push(`Item ${i}: missing latitude or longitude`);
-        continue;
-      }
-      if (typeof loc.latitude !== 'number' || typeof loc.longitude !== 'number') {
-        errors.push(`Item ${i}: latitude and longitude must be numbers`);
-        continue;
-      }
-
-      // Build clean document (no _id, no createdAt — MongoDB will generate _id)
-      const doc = {
-        title: String(loc.title).trim(),
-        description: loc.description ? String(loc.description).trim() : '',
-        imageUrl: loc.imageUrl ? String(loc.imageUrl).trim() : '',
-        latitude: Number(loc.latitude),
-        longitude: Number(loc.longitude),
-        visited: loc.visited === true || loc.visited === 'true' ? true : false,
-        createdAt: new Date()  // fresh timestamp for each imported doc
-      };
-      sanitizedDocs.push(doc);
-    }
-
-    if (sanitizedDocs.length === 0) {
-      return res.status(400).json({ 
-        error: 'No valid locations to import', 
-        details: errors.slice(0, 10) 
-      });
-    }
-
-    // Perform bulk insert
-    const result = await col.insertMany(sanitizedDocs, { ordered: false });
-    
-    // Extract generated IDs as strings
-    const insertedIds = Object.values(result.insertedIds).map(id => id.toString());
-
-    return res.status(201).json({
-      success: true,
-      insertedCount: result.insertedCount,
-      insertedIds: insertedIds,
-      errors: errors.length > 0 ? errors : undefined,
-      message: `Imported ${result.insertedCount} locations. ${errors.length} invalid items skipped.`
-    });
-
-  } catch (err) {
-    console.error('[Bulk Import Error]', err);
-    // Handle partial failures (duplicate keys? but we don't have _id duplicates because we omit _id)
-    if (err.code === 11000) {
-      return res.status(409).json({ error: 'Duplicate key error (unlikely with auto-generated _id)', detail: err.message });
-    }
-    return res.status(500).json({ error: 'Bulk import failed', detail: err.message });
-  }
-}
 
 function serializeDoc(doc) {
   return {
